@@ -277,14 +277,14 @@ def to_int(value, default = 0):
         return int(value)
     except:
         return default
-def to_list(value):
+def to_list(value, sep=','):
     if not value:
         return []
     if isinstance(value, list):
         return value
     if isinstance(value, tuple):
         return list(value)
-    return str(value or "").split(",")
+    return str(value or "").split(sep)
 def int_mode(value):
     try: return int(value, 8)
     except: return None # pragma: no cover
@@ -4612,12 +4612,14 @@ class Systemctl:
         if not conf: return default
         return conf.get(Install, "WantedBy", default, True)
     def enablefolders(self, wanted):
-        if self.user_mode():
-            for folder in self.user_folders():
-                yield self.default_enablefolder(wanted, folder)
-        if True:
-            for folder in self.system_folders():
-                yield self.default_enablefolder(wanted, folder)
+        wanted_list = to_list(wanted, None)
+        for wanted_file in wanted_list:
+            if self.user_mode():
+                for user_folder in self.user_folders():
+                    yield self.default_enablefolder(wanted_file, user_folder)
+            if True:
+                for system_folder in self.system_folders():
+                    yield self.default_enablefolder(wanted_file, system_folder)
     def enablefolder(self, wanted):
         if self.user_mode():
             user_folder = self.user_folder()
@@ -4679,24 +4681,25 @@ class Systemctl:
         if not wanted and not self._force:
             logg.debug("%s has no target", conf.name())
             return False # "static" is-enabled
-        target = wanted or self.get_default_target()
-        folder = self.enablefolder(target)
-        if self._root:
-            folder = os_path(self._root, folder)
-        if not os.path.isdir(folder):
-            os.makedirs(folder)
-        source = conf.filename()
-        if not source: # pragma: no cover (was checked before)
-            logg.debug("%s has no real file", conf.name())
-            return False
-        symlink = os.path.join(folder, conf.name())
-        if True:
-            _f = self._force and "-f" or ""
-            logg.info("ln -s {_f} '{source}' '{symlink}'".format(**locals()))
-        if self._force and os.path.islink(symlink):
-            os.remove(target)
-        if not os.path.islink(symlink):
-            os.symlink(source, symlink)
+        targets = wanted or self.get_default_target()
+        for target in to_list(targets, None):
+            folder = self.enablefolder(target)
+            if self._root:
+                folder = os_path(self._root, folder)
+            if not os.path.isdir(folder):
+                os.makedirs(folder)
+            source = conf.filename()
+            if not source: # pragma: no cover (was checked before)
+                logg.debug("%s has no real file", conf.name())
+                return False
+            symlink = os.path.join(folder, conf.name())
+            if True:
+                _f = self._force and "-f" or ""
+                logg.info("ln -s {_f} '{source}' '{symlink}'".format(**locals()))
+            if self._force and os.path.islink(symlink):
+                os.remove(target)
+            if not os.path.islink(symlink):
+                os.symlink(source, symlink)
         return True
     def rc3_root_folder(self):
         old_folder = os_path(self._root, _rc3_boot_folder)
